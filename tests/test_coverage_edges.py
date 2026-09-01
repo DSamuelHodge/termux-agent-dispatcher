@@ -106,6 +106,35 @@ def test_format_confirm_copy():
     )
 
 
+def test_format_confirm_copy_truncate_and_filter():
+    ellipsis = "\u2026"
+    assert risk_gate._truncate("x" * 81, 80) == "x" * 79 + ellipsis
+    assert len(risk_gate._truncate("x" * 81, 80)) == 80
+
+    title, hint = risk_gate.format_confirm_copy("v", {"a": "x" * 81}, ["a"])
+    assert f"a: {'x' * 79}{ellipsis}" in hint
+
+    long_args = {f"a{i}": "x" * 80 for i in range(5)}
+    title, hint = risk_gate.format_confirm_copy(
+        "v", long_args, [f"a{i}" for i in range(5)],
+    )
+    assert len(hint) == 400
+    assert hint.endswith(ellipsis)
+
+    title, hint = risk_gate.format_confirm_copy("x" * 80, {}, [])
+    assert len(title) == 60
+    assert title.endswith(ellipsis)
+    assert title.startswith("Allow: ")
+
+    title, hint = risk_gate.format_confirm_copy(
+        "v", {"a": 1, "extra": "hidden"}, ["a", "missing"],
+    )
+    assert "a: 1" in hint
+    assert "extra" not in hint
+    assert "hidden" not in hint
+    assert "missing" not in hint
+
+
 def test_recover_orphans(tmp_path, monkeypatch):
     monkeypatch.setattr(tier_b, "PIDFILE", tmp_path / "pids.json")
     (tmp_path / "pids.json").write_text("[1, 2, 3]")
