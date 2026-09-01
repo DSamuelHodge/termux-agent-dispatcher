@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="PocketCode" width="600">
+</p>
+
 # On-device agent dispatcher (Termux:API skeleton)
 
 A loopback HTTP process that runs in Termux and is the only thing on the
