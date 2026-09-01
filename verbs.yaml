@@ -67,7 +67,7 @@ verbs:
   telephony.cellInfo:
     direction: perceive
     tier: A
-    risk: none
+    risk: low
     command: ['termux-telephony-cellinfo']
     args: []
     parser: json
