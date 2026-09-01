@@ -18,6 +18,8 @@ planner. Do not fold an LLM loop into this process.
 - `dispatch/risk_gate.py` — confirm dialog + `logs/audit.log`
 - `dispatch/store.py` — libSQL `verb_events` + circuit breaker (`logs/agent.db`)
 - `docs/verb-catalog.md` — human catalog (direction / tier / risk)
+- `docs/remote-access-tailcat.md` — verbatim remote-access guide (tailcat)
+- `SKILL.md` — how a remote/cloud agent should dial the dispatcher
 - `boot/01-start-agent` — Termux:Boot unit
 
 ## Rules
@@ -61,3 +63,22 @@ On-device Termux only:
 
 Smoke `GET /health`, `battery.status`, and `toast.show` before anything
 with risk `high`.
+
+## How agents connect (remote desktop / cloud)
+
+The daemon stays loopback-only. Remote brains do not get a public URL.
+They reach `127.0.0.1:8477` through **tailcat** (WireGuard userspace
+tunnel). Full text: `docs/remote-access-tailcat.md`. Skill for models:
+`SKILL.md`.
+
+1. Phone: `tailcat serve 8477 --allow=nodekey:<client>`. Never
+   `serve all`, `exit-node`, `no-auth-ssh`, or Tailscale Funnel.
+2. Share the printed `tc…` token out of band. Do not commit it.
+3. Client (desktop or cloud agent):
+
+       tailcat socks "$TOKEN" curl -sS -H "X-Agent-Token: $AUTH" \
+         http://127.0.0.1:8477/health
+
+4. Every HTTP call still needs `X-Agent-Token`. High-risk verbs still
+   wait for an on-device confirm. Rotate the app token by deleting
+   `.agent-token` and restarting the daemon.
