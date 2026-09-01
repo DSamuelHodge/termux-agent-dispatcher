@@ -11,26 +11,15 @@ permission.
 
 ## Install on device (Termux)
 
-    pkg install python
-    pip install pyyaml
-    mkdir -p ~/agent && cp -r * ~/agent/
-    mkdir -p ~/.termux/boot
-    cp boot/01-start-agent ~/.termux/boot/01-start-agent
-    chmod +x ~/.termux/boot/01-start-agent
+From a Termux session on the phone:
 
-Reboot the device once so Termux:Boot picks it up, or start it by hand
-for testing:
+    curl -sL https://raw.githubusercontent.com/DSamuelHodge/termux-agent-dispatcher/main/setup.sh | bash
+
+That installs Python + PyYAML, copies the dispatcher into `~/agent`, and
+installs `~/.termux/boot/01-start-agent`. Reboot once so Termux:Boot
+picks it up, or start it by hand:
 
     cd ~/agent && python daemon.py
-
-USB install from a host with `adb` (device authorized, Termux installed):
-
-    adb push agent/ /data/data/com.termux/files/home/agent
-    adb shell 'run-as com.termux files/usr/bin/bash -lc "cd ~/agent && pip install -r requirements.txt && python daemon.py"'
-
-`run-as` only works on debug builds. On a normal device, copy into
-Termux's home from the host after `adb exec-out` / shared storage, or
-from a second Termux session after pushing to `/sdcard` and `cp -a`.
 
 ## Auth
 
@@ -45,6 +34,7 @@ rotate by deleting the file and restarting the daemon.
 ## the first time so Android's permission prompts can fire)
 
     TOKEN=$(cat ~/agent/.agent-token)
+    curl -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/health
     curl -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/verbs
     curl -X POST -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/perceive/battery.status
     curl -X POST -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/act/toast.show \
