@@ -24,6 +24,38 @@ from dispatch import store as verb_store
 LOG_PATH = Path(__file__).resolve().parent.parent / "logs" / "audit.log"
 _AUDIT_LOCK = threading.Lock()
 
+_VALUE_MAX = 80
+_HINT_MAX = 400
+_TITLE_MAX = 60
+_FOOTER = "Yes allows this. No denies it."
+
+_INTENT = {
+    "sms.send": "Send an SMS",
+    "call.place": "Place a phone call",
+    "camera.photo": "Take a photo",
+    "microphone.record": "Record from the microphone",
+    "fingerprint.auth": "Use the fingerprint sensor",
+    "keystore.list": "List hardware keystore keys",
+    "keystore.generate": "Create a hardware keystore key",
+    "keystore.delete": "Delete a hardware keystore key",
+    "keystore.sign": "Sign data with a keystore key",
+    "keystore.verify": "Verify a keystore signature",
+}
+
+_ARG_LABEL = {
+    "sms.send": {"number": "To", "text": "Message"},
+    "call.place": {"number": "Number"},
+    "camera.photo": {"camera_id": "Camera", "outfile": "Save as"},
+    "microphone.record": {"outfile": "File", "seconds": "Seconds"},
+    "keystore.generate": {"alias": "Alias"},
+    "keystore.delete": {"alias": "Alias"},
+    "keystore.sign": {"alias": "Alias", "algorithm": "Algorithm", "data": "Data"},
+    "keystore.verify": {
+        "alias": "Alias", "algorithm": "Algorithm",
+        "signature": "Signature", "data": "Data",
+    },
+}
+
 
 class Denied(Exception):
     """Raised when a confirmation-gated verb is declined on-device."""
@@ -50,16 +82,43 @@ def audit(event: dict) -> None:
             pass
 
 
-def _confirm_on_device(verb_name: str, args: dict) -> bool:
+def _truncate(s: str, n: int) -> str:
+    if n <= 0:
+        return ""
+    if len(s) <= n:
+        return s
+    return s[: n - 1] + "…"
+
+
+def _fallback_intent(name: str) -> str:
+    return " ".join(p[:1].upper() + p[1:] for p in name.split("."))
+
+
+def format_confirm_copy(verb_name: str, public_args: dict, arg_names: list) -> tuple[str, str]:
+    intent = _INTENT.get(verb_name) or _fallback_intent(verb_name)
+    title = _truncate(f"Allow: {intent}?", _TITLE_MAX)
+    lead = f"The agent wants to {intent[:1].lower() + intent[1:]}."
+    labels = _ARG_LABEL.get(verb_name, {})
+    lines = []
+    for key in arg_names:
+        if key not in public_args:
+            continue
+        label = labels.get(key, key)
+        lines.append(f"{label}: {_truncate(str(public_args[key]), _VALUE_MAX)}")
+    hint = _truncate("\n".join([lead, *lines, _FOOTER]), _HINT_MAX)
+    return title, hint
+
+
+def _confirm_on_device(verb_name: str, public_args: dict, arg_names: list) -> bool:
     """
     Blocks on a termux-dialog confirm prompt shown on the device itself.
     This runs synchronously — the daemon thread handling this request
     waits for a human to tap yes/no on the phone.
     """
-    hint = f"{verb_name}({json.dumps(args, default=str)})"
+    title, hint = format_confirm_copy(verb_name, public_args, arg_names)
     try:
         proc = subprocess.run(
-            ["termux-dialog", "confirm", "-t", "Agent action requires approval", "-i", hint],
+            ["termux-dialog", "confirm", "-t", title, "-i", hint],
             capture_output=True,
             text=True,
             timeout=120,  # human has 2 minutes to respond before this counts as a denial
@@ -99,7 +158,7 @@ def check(catalog: Catalog, verb_name: str, args: dict) -> None:
     if not needs_confirmation:
         return
 
-    approved = _confirm_on_device(verb_name, logged_args)
+    approved = _confirm_on_device(verb_name, logged_args, verb.args)
     audit({
         "verb": verb_name,
         "risk": verb.risk,

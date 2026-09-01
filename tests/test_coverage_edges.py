@@ -54,14 +54,56 @@ def test_tier_a_empty_json():
 
 def test_confirm_yes_json():
     proc = MagicMock(returncode=0, stdout='{"text": "yes"}')
-    with patch("dispatch.risk_gate.subprocess.run", return_value=proc):
-        assert risk_gate._confirm_on_device("v", {"a": 1}) is True
+    with patch("dispatch.risk_gate.subprocess.run", return_value=proc) as run:
+        assert risk_gate._confirm_on_device("v", {"a": 1}, ["a"]) is True
+        argv = run.call_args[0][0]
+        assert argv[:2] == ["termux-dialog", "confirm"]
+        assert "-t" in argv and "-i" in argv
+        title = argv[argv.index("-t") + 1]
+        hint = argv[argv.index("-i") + 1]
+        assert title == "Allow: V?"
+        assert "v(" not in hint
+        assert hint != json.dumps({"a": 1}, default=str)
+        assert hint == "The agent wants to v.\na: 1\nYes allows this. No denies it."
     proc = MagicMock(returncode=1, stdout="")
     with patch("dispatch.risk_gate.subprocess.run", return_value=proc):
-        assert risk_gate._confirm_on_device("v", {}) is False
+        assert risk_gate._confirm_on_device("v", {}, []) is False
     proc = MagicMock(returncode=0, stdout="not-json")
     with patch("dispatch.risk_gate.subprocess.run", return_value=proc):
-        assert risk_gate._confirm_on_device("v", {}) is False
+        assert risk_gate._confirm_on_device("v", {}, []) is False
+
+
+def test_format_confirm_copy():
+    title, hint = risk_gate.format_confirm_copy("v", {"a": 1}, ["a"])
+    assert title == "Allow: V?"
+    assert hint == "The agent wants to v.\na: 1\nYes allows this. No denies it."
+
+    title, hint = risk_gate.format_confirm_copy(
+        "sms.send",
+        {"number": "+1XXXXXXXXXX", "text": "Hello"},
+        ["number", "text"],
+    )
+    assert title == "Allow: Send an SMS?"
+    assert hint == (
+        "The agent wants to send an SMS.\n"
+        "To: +1XXXXXXXXXX\n"
+        "Message: Hello\n"
+        "Yes allows this. No denies it."
+    )
+
+    title, hint = risk_gate.format_confirm_copy(
+        "keystore.sign",
+        {"alias": "k", "algorithm": "SHA256withECDSA", "data": "<12 chars>"},
+        ["alias", "algorithm", "data"],
+    )
+    assert title == "Allow: Sign data with a keystore key?"
+    assert hint == (
+        "The agent wants to sign data with a keystore key.\n"
+        "Alias: k\n"
+        "Algorithm: SHA256withECDSA\n"
+        "Data: <12 chars>\n"
+        "Yes allows this. No denies it."
+    )
 
 
 def test_recover_orphans(tmp_path, monkeypatch):

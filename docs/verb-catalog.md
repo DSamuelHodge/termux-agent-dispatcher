@@ -15,6 +15,8 @@ the next daemon restart. AutoTask-only / Tier C rows (`notification.listen`,
 
 See the root README for install, auth, smoke tests, and the stdin hook.
 
+On-device confirm is prose (`Allow: {intent}?` plus labeled public args), not JSON.
+
 ## Share and open
 
 - `share.send` is a legacy frozen default VIEW (`termux-share {file}` with

@@ -95,9 +95,51 @@ def test_risk_gate_approved(tmp_path, monkeypatch):
 
 def test_confirm_timeout_is_deny():
     with patch("dispatch.risk_gate.subprocess.run", side_effect=subprocess.TimeoutExpired("x", 1)):
-        assert risk_gate._confirm_on_device("v", {}) is False
+        assert risk_gate._confirm_on_device("v", {}, []) is False
     with patch("dispatch.risk_gate.subprocess.run", side_effect=FileNotFoundError):
-        assert risk_gate._confirm_on_device("v", {}) is False
+        assert risk_gate._confirm_on_device("v", {}, []) is False
+
+
+def test_check_confirm_copy_uses_public_args(tmp_path, monkeypatch):
+    from dispatch.catalog import Catalog
+    monkeypatch.setattr(risk_gate, "LOG_PATH", tmp_path / "a.log")
+    cat = Catalog.load(ROOT / "verbs.yaml")
+    captured = []
+    proc = MagicMock(returncode=0, stdout='{"text": "yes"}')
+
+    def fake_run(argv, **kwargs):
+        captured.append(list(argv))
+        return proc
+
+    with patch("dispatch.risk_gate.subprocess.run", side_effect=fake_run):
+        risk_gate.check(cat, "sms.send", {"number": "+1XXXXXXXXXX", "text": "Hello"})
+    argv = captured[-1]
+    assert argv[:2] == ["termux-dialog", "confirm"]
+    title = argv[argv.index("-t") + 1]
+    hint = argv[argv.index("-i") + 1]
+    assert title == "Allow: Send an SMS?"
+    assert "To: +1XXXXXXXXXX" in hint
+    assert "Message: Hello" in hint
+    assert "sms.send(" not in hint
+    assert hint != json.dumps({"number": "+1XXXXXXXXXX", "text": "Hello"}, default=str)
+
+    captured.clear()
+    raw = {"alias": "k", "algorithm": "SHA256withECDSA", "data": "abcdefghijkl"}
+    with patch("dispatch.risk_gate.subprocess.run", side_effect=fake_run):
+        risk_gate.check(cat, "keystore.sign", raw)
+    argv = captured[-1]
+    hint = argv[argv.index("-i") + 1]
+    title = argv[argv.index("-t") + 1]
+    assert title == "Allow: Sign data with a keystore key?"
+    assert "Data: <12 chars>" in hint
+    assert "abcdefghijkl" not in hint
+    assert "keystore.sign(" not in hint
+    log_events = [json.loads(l) for l in (tmp_path / "a.log").read_text().splitlines()]
+    for event in log_events:
+        assert "hint" not in event
+        if event.get("verb") == "keystore.sign" and "args" in event:
+            assert event["args"]["data"] == "<12 chars>"
+            assert isinstance(event["args"], dict)
 
 
 def test_tier_b_start_poll_stop(tmp_path, monkeypatch):
