@@ -1,9 +1,8 @@
-<p align="center">
-  <img src="logo.png" alt="PocketCode" width="600">
-</p>
 
 # On-device agent dispatcher (Termux:API skeleton)
-
+<p align="center">
+  <img src="docs/core_perceive_act_broadened.png" alt="PocketCode" width="600">
+</p>
 A loopback HTTP process that runs in Termux and is the only thing on the
 phone allowed to touch Termux:API. A separate "brain" (local script or
 remote model) calls typed verbs — `perceive.*`, `act.*`, `watch.*` —
@@ -68,6 +67,10 @@ The classified surface is in [docs/verb-catalog.md](docs/verb-catalog.md).
 `verbs.yaml` is what the dispatcher loads. Copy a catalog row into the
 YAML with its real argv template and it is live everywhere (routing,
 risk gating, execution) on next daemon restart.
+
+<p align="center">
+  <img src="docs/irreducible_core.png" alt="PocketCode" width="600">
+</p>
 
 Tier C (ui.tap/ui.type/ui.gesture/ui.screen.read) is intentionally not
 supported yet; see dispatch/tier_c.py for why and what it needs. The
