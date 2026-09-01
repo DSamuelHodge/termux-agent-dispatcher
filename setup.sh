@@ -35,9 +35,6 @@ fi
 command -v python >/dev/null 2>&1 || die "python not found after pkg install"
 command -v git >/dev/null 2>&1 || pkg install -y git || die "git is required"
 
-echo "-> pip install pyyaml"
-python -m pip install --user pyyaml >/dev/null
-
 WORKDIR="${TMPDIR:-/tmp}/termux-agent-dispatcher-src"
 rm -rf "$WORKDIR"
 git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$WORKDIR"
@@ -56,6 +53,15 @@ for dir in dispatch boot docs; do
     cp -a "${WORKDIR}/${dir}/." "${INSTALL_DIR}/${dir}/"
   fi
 done
+
+echo "-> pip install -r ${INSTALL_DIR}/requirements.txt"
+if ! python -m pip install --user -r "${INSTALL_DIR}/requirements.txt"; then
+  echo "setup.sh: pip install of PyYAML/libsql failed." >&2
+  echo "setup.sh: PyYAML is required. libsql on Android often needs a from-source build" >&2
+  echo "setup.sh:   (see tursodatabase/libsql-python; ANDROID_API_LEVEL + matching rust-std)." >&2
+  python -c "import yaml" 2>/dev/null || die "PyYAML is required"
+  python -c "import libsql" 2>/dev/null || echo "setup.sh: libsql missing — dispatch/store.py will not import until it is installed" >&2
+fi
 
 mkdir -p "${INSTALL_DIR}/logs"
 mkdir -p "$BOOT_DIR"

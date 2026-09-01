@@ -81,10 +81,12 @@ when a companion AccessibilityService app lands.
 
 Every call attempt is appended to logs/audit.log as newline-delimited
 JSON, written before execution so a crash still leaves a record of
-intent. Lifecycle per call: `requested` (always, for every verb), then
-`approved`/`denied` for confirmation-gated verbs, then `executed`/`failed`
-after the attempt. Tier B subscriptions add a `stopped` event on
-DELETE /watch/<id>.
+intent. The same lifecycle is also inserted into `logs/agent.db`
+(`verb_events`) with `BEGIN IMMEDIATE` and WAL + `synchronous=FULL`.
+Lifecycle per call: `requested` (always, for every verb), then
+`approved`/`denied` for confirmation-gated verbs, then `timeout`/`executed`/`failed`
+after the attempt. Repeated `timeout`/`failed` rows trip `circuit_open`.
+Tier B subscriptions add a `stopped` event on DELETE /watch/<id> (audit log only).
 
 ## Tests
 

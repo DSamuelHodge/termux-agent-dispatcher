@@ -42,7 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from dispatch import risk_gate, tier_a, tier_c
+from dispatch import risk_gate, store as verb_store, tier_a, tier_c
 from dispatch.catalog import Catalog
 from dispatch.tier_b import SubscriptionManager, recover_orphans
 
@@ -165,14 +165,17 @@ def _run_tier_a(verb_name: str, args: dict) -> tuple[int, dict]:
         return 400, {"error": str(e)}
     try:
         risk_gate.check(catalog, verb_name, args)
+    except verb_store.CircuitOpen as e:
+        return 500, {"error": str(e)}
     except risk_gate.Denied as e:
         return 403, {"error": str(e)}
     logged = verb.public_args(args)
     try:
         result = tier_a.run(verb, args)
     except tier_a.ExecutionError as e:
+        stage = "timeout" if "timed out" in str(e) else "failed"
         risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged,
-                         "stage": "failed", "error": str(e), "stderr": e.stderr[:500]})
+                         "stage": stage, "error": str(e), "stderr": e.stderr[:500]})
         return 500, {"error": str(e), "stderr": e.stderr}
     except ValueError as e:
         risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged,
@@ -325,6 +328,8 @@ class Handler(BaseHTTPRequestHandler):
         if kind == "watch":
             try:
                 risk_gate.check(catalog, verb_name, args)
+            except verb_store.CircuitOpen as e:
+                return _json_response(self, 500, {"error": str(e)})
             except risk_gate.Denied as e:
                 return _json_response(self, 403, {"error": str(e)})
             logged = verb.public_args(args)

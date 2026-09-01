@@ -13,6 +13,19 @@ os.environ.setdefault("AGENT_TOKEN", "test-token-not-for-production")
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _isolated_verb_store(tmp_path, monkeypatch):
+    from dispatch import store as verb_store
+
+    db = tmp_path / "agent.db"
+    monkeypatch.setenv("AGENT_DB_PATH", str(db))
+    verb_store.reset_store()
+    st = verb_store.Store(verb_store.StoreConfig(path=db, offline=True))
+    verb_store.reset_store(st)
+    yield st
+    verb_store.reset_store()
+
+
 @pytest.fixture
 def token():
     return os.environ["AGENT_TOKEN"]

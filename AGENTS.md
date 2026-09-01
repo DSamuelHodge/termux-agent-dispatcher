@@ -16,6 +16,7 @@ planner. Do not fold an LLM loop into this process.
 - `dispatch/catalog.py` — loads YAML; `stdin` field pipes an arg
 - `dispatch/tier_a.py` / `tier_b.py` / `tier_c.py` — execute
 - `dispatch/risk_gate.py` — confirm dialog + `logs/audit.log`
+- `dispatch/store.py` — libSQL `verb_events` + circuit breaker (`logs/agent.db`)
 - `docs/verb-catalog.md` — human catalog (direction / tier / risk)
 - `boot/01-start-agent` — Termux:Boot unit
 

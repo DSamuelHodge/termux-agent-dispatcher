@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 from dispatch.catalog import Catalog
+from dispatch import store as verb_store
 
 LOG_PATH = Path(__file__).resolve().parent.parent / "logs" / "audit.log"
 _AUDIT_LOCK = threading.Lock()
@@ -35,6 +36,18 @@ def audit(event: dict) -> None:
     with _AUDIT_LOCK:
         with LOG_PATH.open("a") as f:
             f.write(line)
+    stage = event.get("stage")
+    if stage in verb_store.STAGES:
+        try:
+            verb_store.get_store().record_outcome(
+                verb=event.get("verb") or "",
+                stage=stage,
+                risk=event.get("risk"),
+                args=event.get("args") if isinstance(event.get("args"), dict) else {},
+                error=event.get("error"),
+            )
+        except Exception:
+            pass
 
 
 def _confirm_on_device(verb_name: str, args: dict) -> bool:
@@ -80,6 +93,8 @@ def check(catalog: Catalog, verb_name: str, args: dict) -> None:
         "confirmation_required": needs_confirmation,
         "stage": "requested",
     })
+
+    verb_store.get_store().guard(verb_name, risk=verb.risk, args=logged_args)
 
     if not needs_confirmation:
         return
