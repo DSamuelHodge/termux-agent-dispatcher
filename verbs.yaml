@@ -342,8 +342,8 @@ verbs:
     direction: act
     tier: A
     risk: low
-    command: ['termux-infrared-transmit', '-f', '{pattern}']
-    args: [pattern]
+    command: ['termux-infrared-transmit', '-f', '{frequency}', '{pattern}']
+    args: [frequency, pattern]
     parser: none
     timeout: 10
   clipboard.set:

@@ -32,3 +32,10 @@ On-device confirm is prose (`Allow: {intent}?` plus labeled public args), not JS
 
 - `usb.list` is `-l`. `usb.request` uses `-r` (`termux-usb -r {device}`),
   risk medium, parser text.
+
+## Official argv notes
+
+- `termux-brightness` always **sets** `0–255|auto`. `brightness.set` is
+  `termux-brightness {value}`. The script has no query mode, so
+  `brightness.get` cannot read current brightness (no-arg prints usage).
+- `infrared.transmit` is `termux-infrared-transmit -f {frequency} {pattern}`.

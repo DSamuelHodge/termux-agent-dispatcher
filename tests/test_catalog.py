@@ -104,3 +104,26 @@ def test_requires_confirmation():
     c = Catalog.load(ROOT / "verbs.yaml")
     assert c.requires_confirmation("sms.send") is True
     assert c.requires_confirmation("toast.show") is False
+
+
+def test_brightness_and_infrared_match_official_scripts():
+    c = Catalog.load(ROOT / "verbs.yaml")
+    # Official termux-brightness always requires 0-255|auto (SET only).
+    assert c.verbs["brightness.set"].command == ["termux-brightness", "{value}"]
+    assert c.verbs["brightness.set"].args == ["value"]
+    assert c.verbs["brightness.set"].build_argv({"value": "128"}) == [
+        "termux-brightness", "128",
+    ]
+    # No query mode in the official script; do not invent get flags.
+    assert c.verbs["brightness.get"].command == ["termux-brightness"]
+    assert c.verbs["brightness.get"].args == []
+    assert c.verbs["brightness.get"].build_argv({}) == ["termux-brightness"]
+    # Official: termux-infrared-transmit -f frequency pattern
+    ir = c.verbs["infrared.transmit"]
+    assert ir.command == [
+        "termux-infrared-transmit", "-f", "{frequency}", "{pattern}",
+    ]
+    assert ir.args == ["frequency", "pattern"]
+    assert ir.build_argv({"frequency": "38000", "pattern": "20,50,20,30"}) == [
+        "termux-infrared-transmit", "-f", "38000", "20,50,20,30",
+    ]
