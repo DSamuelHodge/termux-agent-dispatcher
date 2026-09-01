@@ -14,7 +14,7 @@ def test_health_and_verbs(http_server):
     st, h = api(http_server, "GET", "/health")
     assert st == 200
     assert h["ok"] is True
-    assert h["verbs"] == 73
+    assert h["verbs"] == 86
     assert "watches" in h
     assert "termux_api" in h
     assert h["host"] == "127.0.0.1"

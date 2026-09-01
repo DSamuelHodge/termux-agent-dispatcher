@@ -80,6 +80,14 @@ verbs:
     args: []
     parser: json
     timeout: 10
+  usb.request:
+    direction: act
+    tier: A
+    risk: medium
+    command: ['termux-usb', '-r', '{device}']
+    args: [device]
+    parser: text
+    timeout: 30
   location.get:
     direction: perceive
     tier: A
@@ -264,6 +272,14 @@ verbs:
     args: [file]
     parser: none
     timeout: 10
+  wallpaper.set.url:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-wallpaper', '-u', '{url}']
+    args: [url]
+    parser: none
+    timeout: 10
   fingerprint.auth:
     direction: act
     tier: A
@@ -394,6 +410,14 @@ verbs:
     args: []
     parser: none
     timeout: 10
+  media.resume:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-media-player', 'play']
+    args: []
+    parser: none
+    timeout: 10
   media.stop:
     direction: act
     tier: A
@@ -499,6 +523,79 @@ verbs:
     args: [file]
     parser: none
     timeout: 30
+  share.file.send:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-share', '-a', 'send', '{file}']
+    args: [file]
+    parser: none
+    timeout: 30
+  share.file.view:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-share', '-a', 'view', '{file}']
+    args: [file]
+    parser: none
+    timeout: 30
+  share.file.edit:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-share', '-a', 'edit', '{file}']
+    args: [file]
+    parser: none
+    timeout: 30
+  share.text:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-share', '-a', 'send']
+    args: [text]
+    stdin: text
+    parser: none
+    timeout: 30
+  url.open:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-open-url', '{url}']
+    args: [url]
+    parser: none
+    timeout: 10
+  url.open.in:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-open-url', '{url}', '{package}']
+    args: [url, package]
+    parser: none
+    timeout: 10
+  file.open:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-open', '{path}']
+    args: [path]
+    parser: none
+    timeout: 10
+  file.open.send:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-open', '--send', '{path}']
+    args: [path]
+    parser: none
+    timeout: 10
+  file.open.chooser:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-open', '--chooser', '{path}']
+    args: [path]
+    parser: none
+    timeout: 10
   download.fetch:
     direction: act
     tier: A
@@ -585,6 +682,14 @@ verbs:
     risk: low
     command: ['termux-job-scheduler', '--cancel', '--job-id', '{job_id}']
     args: [job_id]
+    parser: none
+    timeout: 10
+  job.cancel.all:
+    direction: act
+    tier: A
+    risk: low
+    command: ['termux-job-scheduler', '--cancel-all']
+    args: []
     parser: none
     timeout: 10
 confirmation_required_for: [high]
