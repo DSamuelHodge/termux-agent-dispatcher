@@ -65,6 +65,22 @@ class Verb:
         out[self.stdin] = f"<{n} chars>"
         return out
 
+    def public_spec(self) -> dict[str, Any]:
+        """Catalog row the brain can cache: route, parser, timeout, args."""
+        route = "watch" if self.tier == "B" else self.direction
+        spec: dict[str, Any] = {
+            "direction": self.direction,
+            "tier": self.tier,
+            "risk": self.risk,
+            "args": list(self.args),
+            "parser": self.parser,
+            "timeout": self.timeout,
+            "route": route,
+        }
+        if self.stdin:
+            spec["stdin"] = self.stdin
+        return spec
+
 
 class Catalog:
     def __init__(self, verbs: dict[str, Verb], confirmation_required_for: set[str]):

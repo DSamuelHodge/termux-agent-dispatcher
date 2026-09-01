@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .agent-token
 logs/
+.pytest_cache/
+.coverage
+htmlcov/

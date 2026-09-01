@@ -39,11 +39,14 @@ planner. Do not fold an LLM loop into this process.
 
 ## HTTP contract
 
-- `GET /verbs`
+- `GET /health` — pid, uptime, verb count, active watches, termux-api probe
+- `GET /verbs` — each row includes direction, tier, risk, args, parser, timeout, route, optional stdin
+- `POST /perceive` `{"verbs":[...]}` — batch Tier A perceive (names or `{name, args}`)
 - `POST /perceive/<verb>` `{"args":{...}}` — Tier A, direction perceive
 - `POST /act/<verb>` `{"args":{...}}` — Tier A, direction act
 - `POST /watch/<verb>` — Tier B start → `{"id"}`
-- `GET /watch/<id>` / `DELETE /watch/<id>`
+- `GET /watch` — `{ids}` of active subscriptions
+- `GET /watch/<id>` / `DELETE /watch/<id>` — poll stays 200 with `stopped: true` until reaped
 - Header `X-Agent-Token` on every call
 
 Failure order is fixed: 401 auth, 404 unknown verb, 400 route/args,
@@ -51,8 +54,9 @@ Failure order is fixed: 401 auth, 404 unknown verb, 400 route/args,
 
 ## Deploy
 
-Host with `adb` and an authorized USB device. Termux + Termux:API +
-`pkg install python` must already exist on the phone. Push the tree
-to Termux home (via `/sdcard` on production builds) and start
-`python daemon.py`. Smoke `battery.status` and `toast.show` before
-anything with risk `high`.
+On-device Termux only:
+
+    curl -sL https://raw.githubusercontent.com/DSamuelHodge/termux-agent-dispatcher/main/setup.sh | bash
+
+Smoke `GET /health`, `battery.status`, and `toast.show` before anything
+with risk `high`.

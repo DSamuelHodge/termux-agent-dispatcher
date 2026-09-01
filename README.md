@@ -37,6 +37,8 @@ rotate by deleting the file and restarting the daemon.
     curl -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/health
     curl -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/verbs
     curl -X POST -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/perceive/battery.status
+    curl -X POST -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/perceive \
+      -d '{"verbs": ["battery.status", "volume.get"]}'
     curl -X POST -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/act/toast.show \
       -d '{"args": {"text": "hello from the agent"}}'
 
@@ -76,3 +78,10 @@ intent. Lifecycle per call: `requested` (always, for every verb), then
 `approved`/`denied` for confirmation-gated verbs, then `executed`/`failed`
 after the attempt. Tier B subscriptions add a `stopped` event on
 DELETE /watch/<id>.
+
+## Tests
+
+    pip install -r requirements-dev.txt
+    PYTHONPATH=. pytest tests --cov=dispatch --cov=daemon --cov-fail-under=90
+
+Live Termux:API hits are skipped unless `AGENT_LIVE=1` (no SMS / keystore).

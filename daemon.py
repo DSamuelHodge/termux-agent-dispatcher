@@ -32,8 +32,11 @@ import hmac
 import json
 import os
 import secrets
+import shutil
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -68,6 +71,7 @@ AUTH_TOKEN = _load_or_create_token()
 
 catalog = Catalog.load(CATALOG_PATH)
 subs = SubscriptionManager()
+STARTED_AT = time.time()
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict) -> None:
@@ -106,6 +110,110 @@ def _read_body(handler: BaseHTTPRequestHandler) -> dict:
     return payload
 
 
+def _health() -> dict:
+    return {
+        "ok": True,
+        "pid": os.getpid(),
+        "uptime_s": round(time.time() - STARTED_AT, 3),
+        "host": HOST,
+        "port": PORT,
+        "verbs": len(catalog.verbs),
+        "watches": subs.list_active(),
+        "termux_api": shutil.which("termux-battery-status") is not None,
+    }
+
+
+def _parse_batch_verbs(body: dict) -> list[tuple[str, dict]]:
+    verbs = body.get("verbs")
+    if not isinstance(verbs, list) or not verbs:
+        raise ValueError("'verbs' must be a non-empty list")
+    out: list[tuple[str, dict]] = []
+    for item in verbs:
+        if isinstance(item, str):
+            out.append((item, {}))
+            continue
+        if isinstance(item, dict) and isinstance(item.get("name"), str):
+            args = item.get("args", {})
+            if not isinstance(args, dict):
+                raise ValueError("'args' must be an object")
+            out.append((item["name"], args))
+            continue
+        raise ValueError("each batch entry must be a verb name or {name, args}")
+    return out
+
+
+def _run_tier_a(verb_name: str, args: dict) -> tuple[int, dict]:
+    """Shared perceive/act execution. Returns (status, payload)."""
+    try:
+        verb = catalog.get(verb_name)
+    except KeyError as e:
+        return 404, {"error": str(e)}
+    if verb.tier not in ("A", "B"):
+        try:
+            tier_c.run(verb_name, args)
+        except tier_c.TierCNotImplemented as e:
+            return 501, {"error": str(e)}
+    if verb.tier != "A":
+        return 400, {
+            "error": f"{verb_name}: tier {verb.tier} direction "
+                     f"{verb.direction!r} does not support this route",
+        }
+    try:
+        verb.build_argv(args)
+        verb.stdin_payload(args)
+    except ValueError as e:
+        return 400, {"error": str(e)}
+    try:
+        risk_gate.check(catalog, verb_name, args)
+    except risk_gate.Denied as e:
+        return 403, {"error": str(e)}
+    logged = verb.public_args(args)
+    try:
+        result = tier_a.run(verb, args)
+    except tier_a.ExecutionError as e:
+        risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged,
+                         "stage": "failed", "error": str(e), "stderr": e.stderr[:500]})
+        return 500, {"error": str(e), "stderr": e.stderr}
+    except ValueError as e:
+        risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged,
+                         "stage": "failed", "error": str(e)})
+        return 400, {"error": str(e)}
+    risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged, "stage": "executed"})
+    return 200, result
+
+
+def _batch_perceive(entries: list[tuple[str, dict]]) -> tuple[int, dict]:
+    for name, args in entries:
+        try:
+            verb = catalog.get(name)
+        except KeyError as e:
+            return 404, {"error": str(e)}
+        if verb.tier != "A" or verb.direction != "perceive":
+            return 400, {
+                "error": f"{name}: batch perceive only accepts Tier A perceive verbs",
+            }
+        try:
+            verb.build_argv(args)
+            verb.stdin_payload(args)
+        except ValueError as e:
+            return 400, {"error": str(e)}
+
+    items: list[dict | None] = [None] * len(entries)
+
+    def _one(idx: int, name: str, args: dict) -> tuple[int, int, dict]:
+        status, payload = _run_tier_a(name, args)
+        return idx, status, payload
+
+    workers = min(8, len(entries))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = [pool.submit(_one, i, n, a) for i, (n, a) in enumerate(entries)]
+        for fut in as_completed(futs):
+            idx, status, payload = fut.result()
+            name, _ = entries[idx]
+            items[idx] = {"name": name, "status": status, "body": payload}
+    return 200, {"items": items}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         pass  # audit.log via risk_gate is the record of truth, not stdout
@@ -120,18 +228,15 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         parts = path.strip("/").split("/")
 
+        if path.rstrip("/") == "/health":
+            return _json_response(self, 200, _health())
+
         if path.rstrip("/") == "/verbs":
-            listing = {
-                name: {
-                    "direction": v.direction,
-                    "tier": v.tier,
-                    "risk": v.risk,
-                    "args": v.args,
-                    **({"stdin": v.stdin} if v.stdin else {}),
-                }
-                for name, v in catalog.verbs.items()
-            }
+            listing = {name: v.public_spec() for name, v in catalog.verbs.items()}
             return _json_response(self, 200, listing)
+
+        if path.rstrip("/") == "/watch":
+            return _json_response(self, 200, {"ids": subs.list_active()})
 
         if len(parts) == 2 and parts[0] == "watch":
             try:
@@ -147,6 +252,19 @@ class Handler(BaseHTTPRequestHandler):
             return _json_response(self, 401, {"error": "unauthorized"})
 
         parts = self.path.split("?", 1)[0].strip("/").split("/")
+        try:
+            body = _read_body(self)
+        except ValueError as e:
+            return _json_response(self, 400, {"error": str(e)})
+
+        if len(parts) == 1 and parts[0] == "perceive":
+            try:
+                entries = _parse_batch_verbs(body)
+            except ValueError as e:
+                return _json_response(self, 400, {"error": str(e)})
+            status, payload = _batch_perceive(entries)
+            return _json_response(self, status, payload)
+
         if len(parts) != 2:
             return _json_response(self, 404, {"error": "not found"})
 
@@ -154,10 +272,6 @@ class Handler(BaseHTTPRequestHandler):
         if kind not in ("perceive", "act", "watch"):
             return _json_response(self, 404, {"error": "not found"})
 
-        try:
-            body = _read_body(self)
-        except ValueError as e:
-            return _json_response(self, 400, {"error": str(e)})
         args = body.get("args", {})
         if not isinstance(args, dict):
             return _json_response(self, 400, {"error": "'args' must be an object"})
@@ -208,12 +322,11 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             return _json_response(self, 400, {"error": str(e)})
 
-        try:
-            risk_gate.check(catalog, verb_name, args)
-        except risk_gate.Denied as e:
-            return _json_response(self, 403, {"error": str(e)})
-
         if kind == "watch":
+            try:
+                risk_gate.check(catalog, verb_name, args)
+            except risk_gate.Denied as e:
+                return _json_response(self, 403, {"error": str(e)})
             logged = verb.public_args(args)
             try:
                 sub_id = subs.start(verb, args)
@@ -225,19 +338,8 @@ class Handler(BaseHTTPRequestHandler):
                              "stage": "executed", "subscription": sub_id})
             return _json_response(self, 200, {"id": sub_id})
 
-        logged = verb.public_args(args)
-        try:
-            result = tier_a.run(verb, args)
-        except tier_a.ExecutionError as e:
-            risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged,
-                             "stage": "failed", "error": str(e), "stderr": e.stderr[:500]})
-            return _json_response(self, 500, {"error": str(e), "stderr": e.stderr})
-        except ValueError as e:
-            risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged,
-                             "stage": "failed", "error": str(e)})
-            return _json_response(self, 400, {"error": str(e)})
-        risk_gate.audit({"verb": verb_name, "risk": verb.risk, "args": logged, "stage": "executed"})
-        return _json_response(self, 200, result)
+        status, payload = _run_tier_a(verb_name, args)
+        return _json_response(self, status, payload)
 
     def do_DELETE(self):
         if not self._authorized():
