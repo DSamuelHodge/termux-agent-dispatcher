@@ -3,14 +3,18 @@
 # Usage:
 #   curl -sL https://raw.githubusercontent.com/DSamuelHodge/termux-agent-dispatcher/main/setup.sh | bash
 #
-# No ADB. Run this inside Termux (not as a foreign root/proot if you can
-# avoid it — Termux:API talks to the Termux app user).
+# Installs into ~/termux-agent-dispatcher by default. Never ~/agent:
+# that name collides with other CoS/agent trees and overwrites consumers.
+# Override: INSTALL_DIR=/path/to/checkout
+# Emergency: FORCE_INSTALL_DIR=1 INSTALL_DIR=$HOME/agent bash setup.sh
+#
+# No ADB. Run this inside Termux (Termux:API talks to the Termux app user).
 
 set -eu
 
 REPO_URL="${REPO_URL:-https://github.com/DSamuelHodge/termux-agent-dispatcher.git}"
 REPO_REF="${REPO_REF:-main}"
-INSTALL_DIR="${INSTALL_DIR:-${HOME}/agent}"
+INSTALL_DIR="${INSTALL_DIR:-${HOME}/termux-agent-dispatcher}"
 BOOT_DIR="${HOME}/.termux/boot"
 
 die() {
@@ -24,6 +28,12 @@ fi
 
 if ! command -v pkg >/dev/null 2>&1; then
   die "pkg not on PATH — run from a Termux shell"
+fi
+
+# ~/agent was the original default. It is a mixed CoS tree on this phone
+# and a footgun for anyone else who already has ~/agent.
+if [ "$INSTALL_DIR" = "${HOME}/agent" ] && [ "${FORCE_INSTALL_DIR:-}" != 1 ]; then
+  die "refusing INSTALL_DIR=~/agent (clobbers unrelated files). Use the default ~/termux-agent-dispatcher, or FORCE_INSTALL_DIR=1 if you mean it"
 fi
 
 echo "-> installing python (pkg)"
@@ -41,8 +51,8 @@ git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$WORKDIR"
 
 echo "-> installing into ${INSTALL_DIR}"
 mkdir -p "$INSTALL_DIR"
-# Copy dispatcher files only; do not wipe unrelated trees already in $HOME/agent.
-for item in daemon.py verbs.yaml requirements.txt AGENTS.md README.md setup.sh; do
+# Copy dispatcher files only. Do not wipe unrelated files already in INSTALL_DIR.
+for item in daemon.py verbs.yaml requirements.txt AGENTS.md README.md setup.sh SKILL.md; do
   if [ -e "${WORKDIR}/${item}" ]; then
     cp -a "${WORKDIR}/${item}" "${INSTALL_DIR}/${item}"
   fi
@@ -53,6 +63,13 @@ for dir in dispatch boot docs; do
     cp -a "${WORKDIR}/${dir}/." "${INSTALL_DIR}/${dir}/"
   fi
 done
+
+# Keep the existing token if this machine used the old ~/agent install.
+if [ ! -f "${INSTALL_DIR}/.agent-token" ] && [ -f "${HOME}/agent/.agent-token" ]; then
+  cp -a "${HOME}/agent/.agent-token" "${INSTALL_DIR}/.agent-token"
+  chmod 600 "${INSTALL_DIR}/.agent-token"
+  echo "-> adopted token from ~/agent/.agent-token"
+fi
 
 echo "-> pip install -r ${INSTALL_DIR}/requirements.txt"
 if ! python -m pip install --user -r "${INSTALL_DIR}/requirements.txt"; then
@@ -76,8 +93,8 @@ chmod +x "${BOOT_DIR}/01-start-agent"
 echo
 echo "installed to ${INSTALL_DIR}"
 echo "start:  cd ${INSTALL_DIR} && python daemon.py"
-echo "boot:   Termux:Boot will run ~/.termux/boot/01-start-agent after reboot"
-echo "token:  cat ${INSTALL_DIR}/.agent-token   (created on first start)"
+echo "boot:   Termux:Boot runs ~/.termux/boot/01-start-agent (TERMUX_AGENT_DISPATCHER_HOME or ~/termux-agent-dispatcher)"
+echo "token:  cat ${INSTALL_DIR}/.agent-token   (created on first start, or adopted from ~/agent)"
 echo
 echo "smoke:"
 echo "  TOKEN=\$(cat ${INSTALL_DIR}/.agent-token)"

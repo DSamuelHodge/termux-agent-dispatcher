@@ -1,9 +1,19 @@
 #!/data/data/com.termux/files/usr/bin/sh
 # Install this file at ~/.termux/boot/01-start-agent (chmod +x).
 # Termux:Boot runs everything in that directory on device boot.
+#
+# Live tree is the git checkout, never $HOME/agent (that path is a
+# leftover from setup.sh and collides with other "agent" trees).
 
-# Small delay so the filesystem and network are fully up before we start.
+# Small delay so the filesystem is up before we start.
 sleep 5
 
-cd ~/agent || exit 1
+ROOT="${TERMUX_AGENT_DISPATCHER_HOME:-$HOME/termux-agent-dispatcher}"
+if [ ! -f "$ROOT/daemon.py" ]; then
+  echo "01-start-agent: missing $ROOT/daemon.py" >&2
+  exit 1
+fi
+
+cd "$ROOT" || exit 1
+mkdir -p logs
 nohup python daemon.py >> logs/daemon.out 2>&1 &

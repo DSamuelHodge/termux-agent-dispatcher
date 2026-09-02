@@ -34,8 +34,9 @@ planner. Do not fold an LLM loop into this process.
 4. Risk `high` is gated on-device. Do not add a back door that skips
    `risk_gate.check`.
 5. Audit events use `Verb.public_args` so stdin bodies are not logged.
-6. Leave `__pycache__` and `.agent-token` off the device copy when
-   you can. Tokens are per-device.
+6. Leave `__pycache__` and `.agent-token` out of git. Tokens are
+   per-device. Live tree is **`~/termux-agent-dispatcher`**, never
+   `~/agent` (setup.sh leftover; collides with other agent trees).
 7. After YAML or dispatch changes, load-test:
 
        python -c "from dispatch.catalog import Catalog; c=Catalog.load('verbs.yaml'); print(len(c.verbs))"
@@ -57,9 +58,18 @@ Failure order is fixed: 401 auth, 404 unknown verb, 400 route/args,
 
 ## Deploy
 
-On-device Termux only:
+On-device Termux only. Default install dir is `~/termux-agent-dispatcher`.
+`setup.sh` refuses `~/agent` unless `FORCE_INSTALL_DIR=1`.
 
     curl -sL https://raw.githubusercontent.com/DSamuelHodge/termux-agent-dispatcher/main/setup.sh | bash
+
+Boot unit: `~/.termux/boot/01-start-agent` cds to
+`$TERMUX_AGENT_DISPATCHER_HOME` or `~/termux-agent-dispatcher`.
+
+Migrating a phone that still runs from `~/agent`: copy `.agent-token`
+into the git tree (chmod 600), install the new boot unit, restart
+`python daemon.py` from `~/termux-agent-dispatcher`. Do not keep a
+second live `dispatch/` under `~/agent`.
 
 Smoke `GET /health`, `battery.status`, and `toast.show` before anything
 with risk `high`.

@@ -18,11 +18,13 @@ From a Termux session on the phone:
 
     curl -sL https://raw.githubusercontent.com/DSamuelHodge/termux-agent-dispatcher/main/setup.sh | bash
 
-That installs Python + PyYAML, copies the dispatcher into `~/agent`, and
-installs `~/.termux/boot/01-start-agent`. Reboot once so Termux:Boot
-picks it up, or start it by hand:
+That installs Python + PyYAML into **`~/termux-agent-dispatcher`** (the
+git checkout name) and installs `~/.termux/boot/01-start-agent`. It
+**refuses `~/agent`** unless you set `FORCE_INSTALL_DIR=1` — that path
+collides with other agent trees. Reboot once so Termux:Boot picks it up,
+or start it by hand:
 
-    cd ~/agent && python daemon.py
+    cd ~/termux-agent-dispatcher && python daemon.py
 
 ## Auth
 
@@ -30,13 +32,15 @@ Every route requires an `X-Agent-Token` header. The token comes from the
 AGENT_TOKEN env var if set, otherwise it's generated once into
 .agent-token (chmod 600) on first start. Loopback-only is not private on
 Android — any app can dial 127.0.0.1 — so this token is the actual
-access control. Give it to the brain with `cat ~/agent/.agent-token`;
-rotate by deleting the file and restarting the daemon.
+access control. Give it to the brain with
+`cat ~/termux-agent-dispatcher/.agent-token`; rotate by deleting the
+file and restarting the daemon. An old `~/agent/.agent-token` is adopted
+once by `setup.sh` if the new tree has none.
 
 ## Manual smoke test (from another Termux session, device must be unlocked
 ## the first time so Android's permission prompts can fire)
 
-    TOKEN=$(cat ~/agent/.agent-token)
+    TOKEN=$(cat ~/termux-agent-dispatcher/.agent-token)
     curl -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/health
     curl -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/verbs
     curl -X POST -H "X-Agent-Token: $TOKEN" http://127.0.0.1:8477/perceive/battery.status
